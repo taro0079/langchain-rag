@@ -13,6 +13,7 @@ from langchain_chroma import Chroma
 from domain.interfaces import IRagService, IDocumentService
 from infrastructure.rag_service import LangChainRagService
 from infrastructure.document_service import LangChainDocumentService
+from infrastructure.auth_service import AuthService
 import config
 
 
@@ -99,6 +100,17 @@ class AppModule(Module):
             シングルトンのIDocumentService実装インスタンス
         """
         return LangChainDocumentService(embeddings=embeddings, vector_store=vector_store)
+
+    @singleton
+    @provider
+    def provide_auth_service(self) -> AuthService:
+        """
+        認証サービスのプロバイダー
+
+        Returns:
+            シングルトンのAuthServiceインスタンス
+        """
+        return AuthService()
 
 
 def create_injector() -> Injector:

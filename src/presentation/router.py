@@ -1,12 +1,18 @@
 from typing import Any
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from pydantic import BaseModel
+from typing import Optional
 
 from domain.models import UserQuery, DocumentInput
 from domain.interfaces import IRagService, IDocumentService
+from domain.user_models import UserLoginRequest, UserRegisterRequest
+from infrastructure.auth_service import AuthService
+from infrastructure.auth_middleware import get_current_user
 
 
-def get_router(rag_service: IRagService, document_service: IDocumentService) -> APIRouter:
+def get_router(
+    rag_service: IRagService, document_service: IDocumentService, auth_service: AuthService
+) -> APIRouter:
     """
     DIコンテナからサービスを受け取り、ルーターを作成します
 
@@ -57,6 +63,67 @@ def get_router(rag_service: IRagService, document_service: IDocumentService) -> 
         documents: list[DocumentListItemResponse]
         total_count: int
 
+    class AuthResponse(BaseModel):
+        success: bool
+        message: str
+        access_token: Optional[str] = None
+        user_id: Optional[str] = None
+        username: Optional[str] = None
+
+    # 認証エンドポイント
+    @router.post("/auth/register", response_model=AuthResponse, tags=["Auth"])
+    async def register(request: UserRegisterRequest) -> AuthResponse:
+        """
+        新規ユーザーを登録します
+
+        Args:
+            request: ユーザー名とパスワード
+
+        Returns:
+            登録結果
+        """
+        result = auth_service.register(request)
+        return AuthResponse(
+            success=result.success,
+            message=result.message,
+            user_id=result.user_id,
+        )
+
+    @router.post("/auth/login", response_model=AuthResponse, tags=["Auth"])
+    async def login(request: UserLoginRequest) -> AuthResponse:
+        """
+        ユーザーをログインさせます
+
+        Args:
+            request: ユーザー名とパスワード
+
+        Returns:
+            ログイン結果（成功時はアクセストークンを含む）
+        """
+        result = auth_service.login(request)
+        return AuthResponse(
+            success=result.success,
+            message=result.message,
+            access_token=result.access_token,
+            user_id=result.user_id,
+            username=result.username,
+        )
+
+    @router.post("/auth/logout", tags=["Auth"])
+    async def logout(
+        current_user: dict = Depends(get_current_user),
+    ) -> dict[str, str]:
+        """
+        ユーザーをログアウトさせます
+
+        Args:
+            current_user: 認証されたユーザー情報
+
+        Returns:
+            ログアウト完了メッセージ
+        """
+        return {"message": "ログアウトしました"}
+
     # Chat エンドポイント
     @router.post("/chat", response_model=ChatResponse, tags=["Chat"])
     async def chat(request: ChatRequest) -> ChatResponse:
@@ -79,7 +146,10 @@ def get_router(rag_service: IRagService, document_service: IDocumentService) -> 
 
     # ドキュメント投入エンドポイント
     @router.post("/documents", response_model=DocumentUploadResponse, tags=["Documents"])
-    async def upload_documents(request: DocumentUploadRequest) -> DocumentUploadResponse:
+    async def upload_documents(
+        request: DocumentUploadRequest,
+        current_user: dict = Depends(get_current_user),
+    ) -> DocumentUploadResponse:
         """
         ドキュメントをベクトルストアに投入します
 
@@ -106,7 +176,9 @@ def get_router(rag_service: IRagService, document_service: IDocumentService) -> 
 
     # ドキュメント一覧エンドポイント
     @router.get("/documents", response_model=DocumentListResponseData, tags=["Documents"])
-    async def list_documents() -> DocumentListResponseData:
+    async def list_documents(
+        current_user: dict = Depends(get_current_user),
+    ) -> DocumentListResponseData:
         """
         ベクトルストア内の全ドキュメント一覧を取得します
 
@@ -132,7 +204,10 @@ def get_router(rag_service: IRagService, document_service: IDocumentService) -> 
 
     # ドキュメント詳細エンドポイント
     @router.get("/documents/{document_id}", response_model=DocumentInfoResponse, tags=["Documents"])
-    async def get_document(document_id: str) -> DocumentInfoResponse:
+    async def get_document(
+        document_id: str,
+        current_user: dict = Depends(get_current_user),
+    ) -> DocumentInfoResponse:
         """
         指定されたIDのドキュメント詳細を取得します
 
@@ -157,7 +232,9 @@ def get_router(rag_service: IRagService, document_service: IDocumentService) -> 
 
     # ドキュメントクリアエンドポイント
     @router.delete("/documents", response_model=ClearDocumentsResponse, tags=["Documents"])
-    async def clear_documents() -> ClearDocumentsResponse:
+    async def clear_documents(
+        current_user: dict = Depends(get_current_user),
+    ) -> ClearDocumentsResponse:
         """
         ベクトルストア内の全ドキュメントをクリアします
 

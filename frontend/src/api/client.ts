@@ -50,6 +50,13 @@ const API_BASE_URL =
 	import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 
 /**
+ * ローカルストレージからトークンを取得
+ */
+function getAuthToken(): string | null {
+	return localStorage.getItem("authToken");
+}
+
+/**
  * APIリクエストを実行する共通関数
  */
 async function apiRequest<T>(
@@ -57,11 +64,20 @@ async function apiRequest<T>(
 	options: RequestInit = {},
 ): Promise<T> {
 	const url = `${API_BASE_URL}${endpoint}`;
+	const token = getAuthToken();
+
 	const defaultOptions: RequestInit = {
 		headers: {
 			"Content-Type": "application/json",
 		},
 	};
+
+	// トークンがある場合は認証ヘッダーを追加
+	if (token) {
+		(defaultOptions.headers as Record<string, string>)[
+			"Authorization"
+		] = `Bearer ${token}`;
+	}
 
 	const mergedOptions: RequestInit = {
 		...defaultOptions,

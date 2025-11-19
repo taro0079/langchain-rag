@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 # srcディレクトリをPythonパスに追加
@@ -19,6 +20,7 @@ def create_app() -> FastAPI:
         FastAPIアプリケーションインスタンス
     """
     from domain.interfaces import IRagService, IDocumentService
+    from infrastructure.auth_service import AuthService
 
     # DIコンテナの作成
     injector = create_injector()
@@ -26,6 +28,7 @@ def create_app() -> FastAPI:
     # サービスの取得
     rag_service = injector.get(IRagService)
     document_service = injector.get(IDocumentService)
+    auth_service = injector.get(AuthService)
 
     # FastAPIアプリケーションの作成
     app = FastAPI(
@@ -34,8 +37,17 @@ def create_app() -> FastAPI:
         version="0.1.0",
     )
 
+    # CORS設定
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     # ルーターをアプリケーションに登録
-    router = get_router(rag_service, document_service)
+    router = get_router(rag_service, document_service, auth_service)
     app.include_router(router, prefix="/api/v1")
 
     @app.get("/health")
