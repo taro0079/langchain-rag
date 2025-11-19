@@ -169,3 +169,35 @@ export async function clearDocuments(): Promise<ClearDocumentsResponse> {
 		method: "DELETE",
 	});
 }
+
+/**
+ * ファイル（Markdown/PDF）をアップロード
+ */
+export async function uploadDocumentFile(
+	file: File,
+): Promise<DocumentUploadResponse> {
+	const token = localStorage.getItem("authToken");
+	const formData = new FormData();
+	formData.append("file", file);
+
+	const url = `${API_BASE_URL}/documents/upload-file`;
+
+	try {
+		const response = await fetch(url, {
+			method: "POST",
+			body: formData,
+			headers: token ? { Authorization: `Bearer ${token}` } : {},
+		});
+
+		if (!response.ok) {
+			const error = (await response.json()) as { detail: string };
+			throw new Error(error.detail || "File upload failed");
+		}
+
+		return (await response.json()) as DocumentUploadResponse;
+	} catch (error) {
+		throw new Error(
+			error instanceof Error ? error.message : "File upload failed"
+		);
+	}
+}

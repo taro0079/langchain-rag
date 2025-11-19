@@ -62,21 +62,39 @@ class LangChainRagService(IRagService):
         Returns:
             AI生成の回答
         """
-        # RAGチェーンの構築
-        rag_chain = (
-            {
-                "context": self.retriever | self._format_docs,
-                "question": RunnablePassthrough(),
-            }
-            | self.prompt
-            | self.llm
-            | StrOutputParser()
-        )
+        try:
+            # ベクトルストアのドキュメント数を確認
+            stored_data = self.vector_store.get()
+            num_documents = len(stored_data.get("ids", [])) if stored_data else 0
+            print(f"DEBUG: Vector store has {num_documents} documents")
 
-        # クエリの実行
-        answer = rag_chain.invoke(query.content)
+            # ドキュメント検索のテスト
+            retrieved_docs = self.retriever.invoke(query.content)
+            print(f"DEBUG: Retrieved {len(retrieved_docs)} documents for query: {query.content}")
+            for i, doc in enumerate(retrieved_docs):
+                print(f"DEBUG: Doc {i} - {doc.page_content[:100]}...")
 
-        return AiAnswer(content=answer)
+            # RAGチェーンの構築
+            rag_chain = (
+                {
+                    "context": self.retriever | self._format_docs,
+                    "question": RunnablePassthrough(),
+                }
+                | self.prompt
+                | self.llm
+                | StrOutputParser()
+            )
+
+            # クエリの実行
+            answer = rag_chain.invoke(query.content)
+
+            return AiAnswer(content=answer)
+
+        except Exception as e:
+            print(f"DEBUG: Error in generate_answer: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return AiAnswer(content=f"エラーが発生しました: {str(e)}")
 
     def _format_docs(self, docs: List[Document]) -> str:
         """

@@ -7,6 +7,7 @@ import {
 	getDocument,
 	listDocuments,
 	uploadDocument,
+	uploadDocumentFile,
 } from "./api/client";
 import { Login } from "./components/Login";
 import { useAuth } from "./hooks/useAuth";
@@ -26,6 +27,7 @@ const App: FC = () => {
 	const [selectedDocument, setSelectedDocument] =
 		useState<DocumentDetailResponse | null>(null);
 	const [showDocumentDetail, setShowDocumentDetail] = useState(false);
+	const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
 	// ログイン成功時にコンポーネントを再マウント
 	useEffect(() => {
@@ -79,6 +81,27 @@ const App: FC = () => {
 			const response = await uploadDocument(documentContent);
 			alert(`ドキュメントを投入しました: ${response.message}`);
 			setDocumentContent("");
+			// ドキュメント一覧を更新
+			await handleListDocuments();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "エラーが発生しました");
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	// ファイルアップロードハンドラー
+	const handleUploadFile = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!selectedFile) return;
+
+		setLoading(true);
+		setError("");
+
+		try {
+			const response = await uploadDocumentFile(selectedFile);
+			alert(`ファイルを投入しました: ${response.message}`);
+			setSelectedFile(null);
 			// ドキュメント一覧を更新
 			await handleListDocuments();
 		} catch (err) {
@@ -276,33 +299,71 @@ const App: FC = () => {
 								<h3 className="text-xl font-semibold text-gray-900 mb-4">
 									ドキュメント投入
 								</h3>
+									{/* テキスト投入フォーム */}
 									<form onSubmit={handleUploadDocument} className="space-y-4">
+										<div className="text-sm font-medium text-gray-600">テキスト入力</div>
 										<textarea
 											value={documentContent}
 											onChange={(e) => setDocumentContent(e.target.value)}
 											placeholder="ドキュメント内容を入力してください..."
-											rows={8}
+											rows={6}
 											disabled={loading}
 											className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 font-mono text-sm"
 										/>
-										<div className="flex gap-2">
-											<button
-												type="submit"
-												disabled={loading}
-												className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors font-medium"
-											>
-												{loading ? "投入中..." : "ドキュメント投入"}
-											</button>
-											<button
-												type="button"
-												onClick={handleClearDocuments}
-												disabled={loading || documents.length === 0}
-												className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 transition-colors font-medium"
-											>
-												全削除
-											</button>
-										</div>
+										<button
+											type="submit"
+											disabled={loading || !documentContent.trim()}
+											className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors font-medium"
+										>
+											{loading ? "投入中..." : "テキストを投入"}
+										</button>
 									</form>
+
+									{/* ファイルアップロードフォーム */}
+									<form onSubmit={handleUploadFile} className="space-y-4 border-t pt-4">
+										<div className="text-sm font-medium text-gray-600">ファイルアップロード</div>
+										<div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors">
+											<label className="cursor-pointer">
+												<input
+													type="file"
+													accept=".md,.pdf"
+													onChange={(e) => {
+														const file = e.target.files?.[0];
+														if (file) setSelectedFile(file);
+													}}
+													disabled={loading}
+													className="hidden"
+												/>
+												<div className="space-y-2">
+													<p className="text-lg font-medium text-gray-700">
+														{selectedFile ? selectedFile.name : "ファイルを選択"}
+													</p>
+													<p className="text-sm text-gray-500">
+														Markdown (.md) または PDF (.pdf) ファイル
+													</p>
+												</div>
+											</label>
+										</div>
+										<button
+											type="submit"
+											disabled={loading || !selectedFile}
+											className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors font-medium"
+										>
+											{loading ? "投入中..." : "ファイルを投入"}
+										</button>
+									</form>
+
+									{/* 削除ボタン */}
+									<div className="border-t pt-4">
+										<button
+											type="button"
+											onClick={handleClearDocuments}
+											disabled={loading || documents.length === 0}
+											className="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 transition-colors font-medium"
+										>
+											すべてのドキュメントを削除
+										</button>
+									</div>
 									</div>
 
 									{/* 一覧パネル */}

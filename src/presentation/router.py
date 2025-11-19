@@ -1,7 +1,9 @@
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional
+import PyPDF2
+import io
 
 from domain.models import UserQuery, DocumentInput
 from domain.interfaces import IRagService, IDocumentService
@@ -144,7 +146,7 @@ def get_router(
 
         return ChatResponse(answer=answer.content)
 
-    # ドキュメント投入エンドポイント
+    # ドキュメント投入エンドポイント（テキスト）
     @router.post("/documents", response_model=DocumentUploadResponse, tags=["Documents"])
     async def upload_documents(
         request: DocumentUploadRequest,
@@ -166,6 +168,60 @@ def get_router(
         )
 
         # ドキュメントサービスで投入
+        result = document_service.add_documents([doc_input])
+
+        return DocumentUploadResponse(
+            success=result.success,
+            message=result.message,
+            documents_count=result.documents_count,
+        )
+
+    # ファイルアップロードエンドポイント（Markdown/PDF）
+    @router.post("/documents/upload-file", response_model=DocumentUploadResponse, tags=["Documents"])
+    async def upload_file(
+        file: UploadFile = File(...),
+        current_user: dict = Depends(get_current_user),
+    ) -> DocumentUploadResponse:
+        """
+        MarkdownまたはPDFファイルをアップロードして投入します
+
+        Args:
+            file: アップロードするファイル（.md, .pdf）
+            current_user: 認証されたユーザー情報
+
+        Returns:
+            投入結果
+        """
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="ファイル名が必要です")
+
+        # ファイルタイプの判定
+        if file.filename.endswith(".md"):
+            # Markdownファイルの処理
+            content = await file.read()
+            text_content = content.decode("utf-8")
+        elif file.filename.endswith(".pdf"):
+            # PDFファイルの処理
+            content = await file.read()
+            try:
+                pdf_file = io.BytesIO(content)
+                pdf_reader = PyPDF2.PdfReader(pdf_file)
+                text_content = ""
+                for page in pdf_reader.pages:
+                    text_content += page.extract_text() + "\n"
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"PDFの読み込みエラー: {str(e)}")
+        else:
+            raise HTTPException(status_code=400, detail="Markdown (.md) またはPDF (.pdf) ファイルをアップロードしてください")
+
+        if not text_content.strip():
+            raise HTTPException(status_code=400, detail="ファイルが空です")
+
+        # ドキュメントサービスで投入
+        doc_input = DocumentInput(
+            content=text_content,
+            metadata={"filename": file.filename, "file_type": file.content_type},
+        )
         result = document_service.add_documents([doc_input])
 
         return DocumentUploadResponse(
